@@ -61,6 +61,31 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  # === PGADMIN ===
+  pgadmin:
+    image: dpage/pgadmin4:8.14
+    container_name: gamelib_pgadmin
+    restart: unless-stopped
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@gamelib.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      # Не спрашивать мастер-пароль при каждом входе
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      # Сервер gamelib подключается автоматически, вручную добавлять не нужно
+      - ./monitoring/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      # Чтобы Query Tool видел .sql проекта через Ctrl+O. Файловый диалог
+      # pgAdmin заперт в storage-каталоге пользователя, поэтому монтируем
+      # именно туда: admin@gamelib.com -> admin_gamelib.com
+      - ./docs:/var/lib/pgadmin/storage/admin_gamelib.com/docs:ro
+      - ./db:/var/lib/pgadmin/storage/admin_gamelib.com/db:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # === PROMETHEUS ===
   prometheus:
     image: prom/prometheus:v2.50.1
@@ -97,5 +122,6 @@ services:
 
 volumes:
   postgres_data:
+  pgadmin_data:
   prometheus_data:
   grafana_data:

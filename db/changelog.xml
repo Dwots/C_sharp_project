@@ -11,5 +11,6 @@
     <include file="changelogs/004_create_game_categories.sql" relativeToChangelogFile="true"/>
     <include file="changelogs/005_create_user_games.sql" relativeToChangelogFile="true"/>
     <include file="changelogs/006_create_api_keys.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/007_create_play_sessions.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

@@ -48,6 +48,7 @@ docker compose up -d --build
 | Redis | localhost:6379 | |
 | Prometheus | http://localhost:9090 | |
 | Grafana | http://localhost:3000 | `admin` / `admin` |
+| pgAdmin | http://localhost:5050 | `admin@gamelib.com` / `admin`, пароль к БД `gamepass` |
 
 Остановить: `docker compose down` (с удалением данных — `docker compose down -v`).
 
@@ -148,6 +149,26 @@ curl http://localhost:5000/api/game -H "X-API-KEY: dev-api-key-12345"
 | PUT | `/api/users/{userId}/games/{gameId}` | Admin, Manager, User |
 | DELETE | `/api/users/{userId}/games/{gameId}` | Admin, Manager, User |
 
+### Игровые сессии
+
+| Метод | Путь | Роли |
+|---|---|---|
+| GET | `/api/users/{userId}/sessions` | Admin, Manager, User |
+| POST | `/api/users/{userId}/sessions` | Admin, Manager, User |
+| GET | `/api/users/{userId}/activity` | Admin, Manager, User |
+
+Параметры `/api/users/{userId}/sessions`: `page` (с 1), `pageSize` (до 100), `platform`, `from`, `to`, `minDuration`. Сортировка — всегда по `created_at DESC`.
+
+Обычный пользователь видит только свои сессии; Admin и Manager — любые.
+
+### Статистика
+
+| Метод | Путь | Роли |
+|---|---|---|
+| GET | `/api/stats/top-games` | Admin, Manager, User |
+
+Параметры: `limit` (1–100, по умолчанию 10), `days` — учитывать только последние N дней.
+
 ### Служебные
 
 | Метод | Путь | Доступ |
@@ -155,6 +176,200 @@ curl http://localhost:5000/api/game -H "X-API-KEY: dev-api-key-12345"
 | GET | `/health` | Все |
 | GET | `/metrics` | Все |
 | GET | `/swagger` | Все |
+
+## Схема БД
+
+```
+                  ┌──────────────┐         ┌────────────────┐         ┌──────────────┐
+                  │    users     │         │ game_categories│         │  categories  │
+                  ├──────────────┤         ├────────────────┤         ├──────────────┤
+                  │ id       PK  │         │ game_id     FK │────────>│ id       PK  │
+                  │ username  UQ │         │ category_id FK │         │ name         │
+                  │ email     UQ │         └────────────────┘         │ description  │
+                  │ password_hash│                  │                 └──────────────┘
+                  │ role         │                  │
+                  │ created_at   │                  v
+                  └──────────────┘         ┌──────────────┐
+                     │        │            │    games     │
+                     │        │            ├──────────────┤
+                     │        │            │ id       PK  │
+                     │        │            │ title        │
+                     │        │            │ price        │
+                     │        │            │ developer    │
+                     │        │            │ release_date │
+                     │        │            │ created_at   │
+                     │        │            └──────────────┘
+                     │        │               │        │
+                     v        │               │        │
+            ┌────────────────┐│               │        │
+            │   user_games   ││<──────────────┘        │
+            ├────────────────┤│                        │
+            │ user_id  PK FK ││                        │
+            │ game_id  PK FK ││                        │
+            │ rating         ││                        │
+            │ added_at       ││                        │
+            └────────────────┘│                        │
+                              v                        v
+                     ┌──────────────────────────────────────┐
+                     │           play_sessions              │  ← растущая
+                     ├──────────────────────────────────────┤
+                     │ id               PK  BIGSERIAL       │
+                     │ user_id          FK  -> users(id)    │
+                     │ game_id          FK  -> games(id)    │
+                     │ duration_minutes                     │
+                     │ platform                             │
+                     │ created_at                           │
+                     └──────────────────────────────────────┘
+
+            ┌──────────────┐
+            │   api_keys   │  (техническая таблица, связей не имеет)
+            ├──────────────┤
+            │ id       PK  │
+            │ key_hash  UQ │
+            │ name, role   │
+            │ is_active    │
+            │ expires_at   │
+            │ created_at   │
+            └──────────────┘
+```
+
+**Связи:**
+
+| Тип | Где |
+|---|---|
+| one-to-many | `users` → `play_sessions`, `games` → `play_sessions` |
+| many-to-many | `games` ↔ `categories` через `game_categories` |
+| many-to-many | `users` ↔ `games` через `user_games` (с атрибутом `rating`) |
+
+Все таблицы создаются миграциями Liquibase из `db/changelogs/`, вручную схема не правится.
+
+---
+
+## Основная сущность для масштабирования
+
+```
+Основная сущность для масштабирования:
+play_sessions
+```
+
+**Почему она подходит:**
+
+`play_sessions` — журнал фактов «пользователь играл в игру столько-то минут». В отличие от остальных таблиц, её рост ничем не ограничен сверху:
+
+- `users`, `games`, `categories` растут медленно и линейно — это справочники;
+- `user_games` ограничена сверху произведением «пользователи × игры»: одна пара может встретиться в ней лишь однажды, потому что `PRIMARY KEY (user_id, game_id)`;
+- `play_sessions` копится **каждый раз, когда кто-то запускает игру**. Одна и та же пара «пользователь + игра» порождает новую строку хоть по нескольку раз в день.
+
+При 10 000 активных пользователей и 2 сессиях в день это ~7,3 млн строк в год; при 100 000 пользователей — свыше 70 млн.
+
+Отдельно важно, что таблица пригодна для будущего партиционирования по времени: у неё есть суррогатный `id BIGSERIAL` и колонка `created_at`, а ключ партиционирования в PostgreSQL обязан входить в первичный ключ. У `user_games` с составным ключом `(user_id, game_id)` такой возможности нет — это и было причиной завести отдельную таблицу.
+
+**Поля, по которым чаще всего идут поиск и фильтрация:** `user_id`, `created_at`, `platform`, `game_id`.
+
+---
+
+## Сложные запросы
+
+Все перечисленные запросы реально выполняются сервисом — они лежат в `Repositories/PlaySessionRepository.cs` явным SQL (Dapper), а не прячутся за LINQ.
+
+### JOIN-запрос №1 — история сессий пользователя
+
+Три таблицы. Обслуживает `GET /api/users/{userId}/sessions`.
+
+```sql
+SELECT
+    ps.id, ps.user_id, u.username,
+    ps.game_id, g.title AS game_title,
+    ps.duration_minutes, ps.platform, ps.created_at
+FROM play_sessions ps
+JOIN users u ON u.id = ps.user_id
+JOIN games g ON g.id = ps.game_id
+WHERE ps.user_id = @UserId
+  AND ps.platform = @Platform
+  AND ps.created_at >= @From
+ORDER BY ps.created_at DESC
+LIMIT @Limit OFFSET @Offset;
+```
+
+### JOIN-запрос №2 — топ игр по наигранному времени
+
+Четыре таблицы плюс CTE. Обслуживает `GET /api/stats/top-games`.
+
+Сессии агрегируются **до** присоединения жанров: если джойнить `game_categories` сразу, `LIMIT` применится к парам «игра × жанр» и одна и та же игра займёт несколько строк выдачи.
+
+```sql
+WITH game_totals AS (
+    SELECT
+        ps.game_id,
+        COUNT(*)                   AS sessions_count,
+        COUNT(DISTINCT ps.user_id) AS unique_players,
+        SUM(ps.duration_minutes)   AS total_minutes,
+        ROUND(AVG(ps.duration_minutes), 1)::float8 AS avg_minutes
+    FROM play_sessions ps
+    WHERE (@From::timestamp IS NULL OR ps.created_at >= @From::timestamp)
+    GROUP BY ps.game_id
+    ORDER BY total_minutes DESC
+    LIMIT @Limit
+)
+SELECT
+    g.id, g.title,
+    string_agg(DISTINCT c.name, ', ') AS categories,
+    t.sessions_count, t.unique_players, t.total_minutes, t.avg_minutes
+FROM game_totals t
+JOIN games g                 ON g.id = t.game_id
+LEFT JOIN game_categories gc ON gc.game_id = g.id
+LEFT JOIN categories c       ON c.id = gc.category_id
+GROUP BY g.id, g.title, t.sessions_count, t.unique_players,
+         t.total_minutes, t.avg_minutes
+ORDER BY t.total_minutes DESC;
+```
+
+### Агрегирующий запрос — активность пользователя
+
+`COUNT`, `COUNT(DISTINCT)`, `SUM`, `MAX` и `GROUP BY`. Обслуживает `GET /api/users/{userId}/activity`.
+
+```sql
+SELECT
+    u.id, u.username,
+    COUNT(ps.id)                          AS sessions_count,
+    COUNT(DISTINCT ps.game_id)            AS distinct_games,
+    COALESCE(SUM(ps.duration_minutes), 0) AS total_minutes,
+    MAX(ps.created_at)                    AS last_played_at
+FROM users u
+LEFT JOIN play_sessions ps ON ps.user_id = u.id
+WHERE u.id = @UserId
+GROUP BY u.id, u.username;
+```
+
+`LEFT JOIN` здесь принципиален: пользователь без единой сессии всё равно должен вернуться — с нулями, а не с пустым ответом.
+
+---
+
+## Генерация данных
+
+Миграции создают только минимальный набор для проверки API: администратора, 10 жанров и dev-ключ. Большие объёмы заливаются отдельным скриптом — в миграциях им не место, иначе миллион строк уезжал бы в базу при каждом старте.
+
+```bash
+# по умолчанию: 10 000 пользователей, 1 000 игр, 1 000 000 сессий
+./db/seed/generate.sh
+
+# свои объёмы: пользователи, игры, сессии
+./db/seed/generate.sh 100000 5000 5000000
+```
+
+Либо напрямую, без Docker:
+
+```bash
+psql -h localhost -p 5434 -U gameuser -d gamelibdb \
+     -v users=10000 -v games=1000 -v sessions=1000000 \
+     -f db/seed/generate_data.sql
+```
+
+Скрипт заполняет `users`, `games`, `game_categories`, `user_games` и `play_sessions`, после чего выполняет `ANALYZE` по всем таблицам — без свежей статистики планировщик ошибается в оценках и замеры `EXPLAIN ANALYZE` становятся недостоверными.
+
+Ориентир по времени на объёме по умолчанию: около минуты, из них ~35 секунд — вставка миллиона сессий. Пароль у всех сгенерированных пользователей тот же, что у админа — `Admin123!`.
+
+---
 
 ## Идемпотентность
 
@@ -176,6 +391,31 @@ dotnet test
 
 21 тест на репозитории игр, пользователей и категорий (EF Core InMemory).
 
+## Архитектура
+
+```
+Client
+  │
+  v
+Controller   — разбор HTTP, проверка ролей. К БД не обращается.
+  │
+  v
+Service      — бизнес-логика, права доступа, кэш, валидация связей
+  │
+  v
+Repository   — единственное место, где выполняются SQL-запросы
+  │
+  v
+PostgreSQL
+```
+
+Контроллеры не работают с базой напрямую: они знают только про сервисы, а те — только про интерфейсы репозиториев (`Repositories/Interfaces/`). Подключение к PostgreSQL создаётся в двух местах и больше нигде:
+
+- `Data/AppDbContext.cs` — EF Core, строка подключения приходит из DI (`Program.cs`);
+- репозитории на Dapper (`CategoryDapperRepository`, `PlaySessionRepository`) — `NpgsqlConnection` создаётся в методе `CreateConnection()` из `ConnectionStrings:DefaultConnection`.
+
+Запросы к `play_sessions` намеренно написаны на Dapper явным SQL: это основная растущая таблица, и её запросы должны быть видимы и пригодны для `EXPLAIN ANALYZE` без разглядывания сгенерированного LINQ.
+
 ## Структура проекта
 
 ```
@@ -187,8 +427,10 @@ DTOs/           — контракты запросов и ответов
 Validators/     — правила FluentValidation
 Middleware/     — API-ключи, идемпотентность, метрики, логирование, обработка ошибок
 Data/           — DbContext
-db/             — миграции Liquibase
-monitoring/     — конфиги Prometheus и Grafana
+db/changelogs/  — миграции Liquibase
+db/seed/        — генератор тестовых данных
+docs/           — отчёты по лабораторным работам
+monitoring/     — конфиги Prometheus, Grafana и pgAdmin
 tests/          — юнит-тесты
 ```
 

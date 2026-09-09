@@ -10,15 +10,15 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
---rollback DROP TABLE users;
-
---Пароль: "Admin123!"
+-- Администратор по умолчанию. Пароль: "Admin123!" (BCrypt-хэш).
 INSERT INTO users (username, email, password_hash, role, created_at)
 VALUES (
-       'admin',
-       'admin@gamelib.com',
-       '$2a$11$EWcKumG.yY3d.n8dIejCMeQdQZv1SPVUHIJC94WmTk3J2ed77IAl2',
-       'Admin',
-       NOW()
-       )
+    'admin',
+    'admin@gamelib.com',
+    '$2a$11$EWcKumG.yY3d.n8dIejCMeQdQZv1SPVUHIJC94WmTk3J2ed77IAl2',
+    'Admin',
+    NOW()
+)
 ON CONFLICT (email) DO NOTHING;
+
+--rollback DROP TABLE users;

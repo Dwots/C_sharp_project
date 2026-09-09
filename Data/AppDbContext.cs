@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<GameCategory> GameCategories { get; set; }
     public DbSet<UserGame> UserGames { get; set; }
     public DbSet<ApiKey> ApiKeys { get; set; }
+    public DbSet<PlaySession> PlaySessions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

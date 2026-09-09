@@ -115,10 +115,12 @@ public class GameService : IGameService
         {
             foreach (var categoryId in dto.CategoryIds)
             {
-                if (await _categoryRepository.ExistsAsync(categoryId))
-                {
-                    game.GameCategories.Add(new GameCategory { CategoryId = categoryId });
-                }
+                // Раньше несуществующая категория молча отбрасывалась: игра
+                // создавалась с пустым списком, а клиент считал, что связал её.
+                if (!await _categoryRepository.ExistsAsync(categoryId))
+                    throw new ArgumentException($"Категория {categoryId} не найдена");
+
+                game.GameCategories.Add(new GameCategory { CategoryId = categoryId });
             }
         }
 
@@ -149,10 +151,10 @@ public class GameService : IGameService
         {
             foreach (var categoryId in dto.CategoryIds)
             {
-                if (await _categoryRepository.ExistsAsync(categoryId))
-                {
-                    existing.GameCategories.Add(new GameCategory { GameId = id, CategoryId = categoryId });
-                }
+                if (!await _categoryRepository.ExistsAsync(categoryId))
+                    throw new ArgumentException($"Категория {categoryId} не найдена");
+
+                existing.GameCategories.Add(new GameCategory { GameId = id, CategoryId = categoryId });
             }
         }
 

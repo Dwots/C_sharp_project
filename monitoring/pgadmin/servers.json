@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "gamelib",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "gamelibdb",
+      "Username": "gameuser",
+      "SSLMode": "prefer",
+      "Comment": "Основная БД проекта. Пароль: gamepass"
+    }
+  }
+}

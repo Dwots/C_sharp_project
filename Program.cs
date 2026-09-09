@@ -101,6 +101,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserGameRepository, UserGameRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryDapperRepository>();
+builder.Services.AddScoped<IPlaySessionRepository, PlaySessionRepository>();
 
 // SERVICES 
 builder.Services.AddScoped<IGameService, GameService>();
@@ -108,6 +109,7 @@ builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IUserGameService, UserGameService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPlaySessionService, PlaySessionService>();
 builder.Services.AddSingleton<IMetricsService, MetricsService>();
 
 // FLUENT VALIDATION 
