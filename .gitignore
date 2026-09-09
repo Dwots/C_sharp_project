@@ -1,0 +1,20 @@
+# Build
+[Bb]in/
+[Oo]bj/
+
+# IDE
+.idea/
+.vs/
+*.user
+*.suo
+
+# Tests
+[Tt]est[Rr]esult*/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

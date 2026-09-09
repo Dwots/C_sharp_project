@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <include file="changelogs/001_create_games.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/002_create_categories.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/003_create_users.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/004_create_game_categories.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/005_create_user_games.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/006_create_api_keys.sql" relativeToChangelogFile="true"/>
+
+</databaseChangeLog>
