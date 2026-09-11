@@ -12,6 +12,16 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=gamelibdb;Username=gameuser;Password=gamepass
       - ConnectionStrings__Redis=redis:6379
       - AuthSettings__SecretKey=YourSuperSecretKeyThatIsAtLeast32CharactersLong!
+      # Алертинг партиций (лабораторная №3). Значения берутся из .env в корне
+      # проекта; если файла нет, переменные пустые и алерты просто пишутся в лог.
+      - Alerting__Telegram__BotToken=${TELEGRAM_BOT_TOKEN:-}
+      - Alerting__Telegram__ChatId=${TELEGRAM_CHAT_ID:-}
+    # DNS хоста отдаёт api.telegram.org через локальный туннель (fc00::b),
+    # который контейнеру недоступен. Публичные резолверы возвращают реальные
+    # адреса, и до них контейнер достукивается напрямую.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,6 +40,10 @@ services:
       POSTGRES_DB: gamelibdb
     ports:
       - "5434:5432"
+    # Docker по умолчанию даёт контейнеру 64 МБ /dev/shm. PostgreSQL использует
+    # этот раздел для обмена между параллельными процессами, и на таблицах в
+    # миллионы строк воркеры падают с "could not resize shared memory segment".
+    shm_size: 1gb
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -60,6 +60,11 @@ builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
 
+// ВАЖНО: стандартное логирование HttpClient пишет полный URL запроса, а токен
+// Telegram-бота передаётся прямо в пути (/bot<TOKEN>/sendMessage). На уровне
+// Information это положило бы секрет в логи открытым текстом.
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -102,6 +107,7 @@ builder.Services.AddScoped<IUserGameRepository, UserGameRepository>();
 builder.Services.AddScoped<IApiKeyRepository, ApiKeyRepository>();
 builder.Services.AddScoped<ICategoryRepository, CategoryDapperRepository>();
 builder.Services.AddScoped<IPlaySessionRepository, PlaySessionRepository>();
+builder.Services.AddScoped<IPartitionRepository, PartitionRepository>();
 
 // SERVICES 
 builder.Services.AddScoped<IGameService, GameService>();
@@ -110,6 +116,14 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IUserGameService, UserGameService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaySessionService, PlaySessionService>();
+builder.Services.AddScoped<IPartitionService, PartitionService>();
+
+// ALERTING + PARTITION MAINTENANCE (лабораторная №3)
+// Singleton: сервис помнит последнее состояние по каждой таблице, чтобы не
+// отправлять один и тот же алерт повторно.
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<IAlertService, TelegramAlertService>();
+builder.Services.AddHostedService<GameLibApi.BackgroundJobs.PartitionMaintenanceJob>();
 builder.Services.AddSingleton<IMetricsService, MetricsService>();
 
 // FLUENT VALIDATION 

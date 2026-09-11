@@ -12,5 +12,7 @@
     <include file="changelogs/005_create_user_games.sql" relativeToChangelogFile="true"/>
     <include file="changelogs/006_create_api_keys.sql" relativeToChangelogFile="true"/>
     <include file="changelogs/007_create_play_sessions.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/008_play_sessions_indexes.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/009_partition_play_sessions.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
