@@ -14,5 +14,6 @@
     <include file="changelogs/007_create_play_sessions.sql" relativeToChangelogFile="true"/>
     <include file="changelogs/008_play_sessions_indexes.sql" relativeToChangelogFile="true"/>
     <include file="changelogs/009_partition_play_sessions.sql" relativeToChangelogFile="true"/>
+    <include file="changelogs/010_replication_role.sql" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

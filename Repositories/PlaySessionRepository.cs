@@ -17,6 +17,7 @@ namespace GameLibApi.Repositories;
 public class PlaySessionRepository : IPlaySessionRepository
 {
     private readonly string _connectionString;
+    private readonly string _replicaConnectionString;
     private readonly ILogger<PlaySessionRepository> _logger;
 
     public PlaySessionRepository(
@@ -24,10 +25,24 @@ public class PlaySessionRepository : IPlaySessionRepository
         ILogger<PlaySessionRepository> logger)
     {
         _connectionString = configuration.GetConnectionString("DefaultConnection")!;
+
+        // Если реплика не настроена, читаем с Primary: проект должен
+        // подниматься и без неё.
+        _replicaConnectionString =
+            configuration.GetConnectionString("ReplicaConnection") ?? _connectionString;
+
         _logger = logger;
     }
 
+    /// <summary>Подключение к Primary. Все операции записи идут только сюда.</summary>
     private NpgsqlConnection CreateConnection() => new(_connectionString);
+
+    /// <summary>
+    /// Подключение к Replica — только для чтения (лабораторная №4).
+    /// Реплика отстаёт от Primary на величину replication lag, поэтому сюда
+    /// направляются лишь запросы, которым допустима слегка неактуальная картина.
+    /// </summary>
+    private NpgsqlConnection CreateReplicaConnection() => new(_replicaConnectionString);
 
     // ------------------------------------------------------------------
     // Query 1 / 2 / 3 — JOIN трёх таблиц + фильтры + сортировка + LIMIT.
@@ -169,11 +184,18 @@ public class PlaySessionRepository : IPlaySessionRepository
                      t.total_minutes, t.avg_minutes
             ORDER BY t.total_minutes DESC";
 
-        await using var connection = CreateConnection();
+        // Читаем с Replica, а не с Primary: запрос аналитический, тяжёлый
+        // и не требует последних миллисекунд данных.
+        await using var connection = CreateReplicaConnection();
         await connection.OpenAsync();
 
         var result = (await connection.QueryAsync<GameStatsDto>(sql, new { From = from, Limit = limit })).ToList();
-        _logger.LogInformation("[Dapper] Top games: {Count} rows", result.Count);
+
+        // Показывает, с какого сервера пришёл ответ: на Replica вернёт true.
+        var isReplica = await connection.ExecuteScalarAsync<bool>("SELECT pg_is_in_recovery()");
+        _logger.LogInformation(
+            "[Dapper] Top games: {Count} rows | источник: {Source}",
+            result.Count, isReplica ? "Replica" : "Primary");
 
         return result;
     }

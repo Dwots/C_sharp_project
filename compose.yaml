@@ -10,6 +10,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=gamelibdb;Username=gameuser;Password=gamepass
+      - ConnectionStrings__ReplicaConnection=Host=postgres_replica;Port=5432;Database=gamelibdb;Username=gameuser;Password=gamepass
       - ConnectionStrings__Redis=redis:6379
       - AuthSettings__SecretKey=YourSuperSecretKeyThatIsAtLeast32CharactersLong!
       # Алертинг партиций (лабораторная №3). Значения берутся из .env в корне
@@ -29,7 +30,7 @@ services:
         condition: service_started
       liquibase:
         condition: service_completed_successfully
-        
+
   postgres:
     image: postgres:16-alpine
     container_name: gamelib_db
@@ -44,13 +45,48 @@ services:
     # этот раздел для обмена между параллельными процессами, и на таблицах в
     # миллионы строк воркеры падают с "could not resize shared memory segment".
     shm_size: 1gb
+    command:
+      - postgres
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/replication/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gameuser -d gamelibdb"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  postgres_replica:
+    image: postgres:16-alpine
+    container_name: gamelib_db_replica
+    restart: unless-stopped
+    user: postgres
+    environment:
+      PGPASSWORD: replpass
+      PGDATA: /var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c '
+      if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+        echo "Replica: копии нет, снимаю с Primary...";
+        rm -rf "$$PGDATA"/*;
+        until pg_basebackup -h postgres -p 5432 -U replicator -D "$$PGDATA" -Fp -Xs -R -P; do
+          echo "Replica: Primary ещё не готов, повтор через 3 с...";
+          sleep 3;
+        done;
+        chmod 0700 "$$PGDATA";
+      fi;
+      exec postgres -c hot_standby=on
+      '
 
   liquibase:
     image: liquibase/liquibase:4.29-alpine
@@ -67,7 +103,7 @@ services:
       - --username=gameuser
       - --password=gamepass
       - update
-        
+
   redis:
     image: redis:alpine
     container_name: gamelib_redis
@@ -86,7 +122,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@gamelib.com
       PGADMIN_DEFAULT_PASSWORD: admin
       # Не спрашивать мастер-пароль при каждом входе
-      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
       # Сервер gamelib подключается автоматически, вручную добавлять не нужно
@@ -111,9 +147,9 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.enable-lifecycle'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -136,6 +172,7 @@ services:
 
 volumes:
   postgres_data:
+  postgres_replica_data:
   pgadmin_data:
   prometheus_data:
   grafana_data:
