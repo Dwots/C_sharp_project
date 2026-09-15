@@ -11,6 +11,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=gamelibdb;Username=gameuser;Password=gamepass
       - ConnectionStrings__ReplicaConnection=Host=postgres_replica;Port=5432;Database=gamelibdb;Username=gameuser;Password=gamepass
+      # Шарды (лабораторная №5): три независимых PostgreSQL.
+      - Sharding__Shards__0=Host=shard0;Port=5432;Database=shard;Username=gameuser;Password=gamepass
+      - Sharding__Shards__1=Host=shard1;Port=5432;Database=shard;Username=gameuser;Password=gamepass
+      - Sharding__Shards__2=Host=shard2;Port=5432;Database=shard;Username=gameuser;Password=gamepass
       - ConnectionStrings__Redis=redis:6379
       - AuthSettings__SecretKey=YourSuperSecretKeyThatIsAtLeast32CharactersLong!
       # Алертинг партиций (лабораторная №3). Значения берутся из .env в корне
@@ -87,6 +91,66 @@ services:
       fi;
       exec postgres -c hot_standby=on
       '
+
+  # === ШАРДЫ (лабораторная №5) ===
+  # Три независимых PostgreSQL. Каждый хранит свою долю play_sessions;
+  # общих данных между ними нет, реплики друг другу они не являются.
+  shard0:
+    image: postgres:16-alpine
+    container_name: gamelib_shard0
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gameuser
+      POSTGRES_PASSWORD: gamepass
+      POSTGRES_DB: shard
+    ports:
+      - "5441:5432"
+    volumes:
+      - shard0_data:/var/lib/postgresql/data
+      - ./db/sharding/init-shard.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameuser -d shard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  shard1:
+    image: postgres:16-alpine
+    container_name: gamelib_shard1
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gameuser
+      POSTGRES_PASSWORD: gamepass
+      POSTGRES_DB: shard
+    ports:
+      - "5442:5432"
+    volumes:
+      - shard1_data:/var/lib/postgresql/data
+      - ./db/sharding/init-shard.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameuser -d shard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  shard2:
+    image: postgres:16-alpine
+    container_name: gamelib_shard2
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gameuser
+      POSTGRES_PASSWORD: gamepass
+      POSTGRES_DB: shard
+    ports:
+      - "5443:5432"
+    volumes:
+      - shard2_data:/var/lib/postgresql/data
+      - ./db/sharding/init-shard.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameuser -d shard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   liquibase:
     image: liquibase/liquibase:4.29-alpine
@@ -173,6 +237,9 @@ services:
 volumes:
   postgres_data:
   postgres_replica_data:
+  shard0_data:
+  shard1_data:
+  shard2_data:
   pgadmin_data:
   prometheus_data:
   grafana_data:

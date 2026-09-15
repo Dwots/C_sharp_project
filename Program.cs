@@ -117,6 +117,7 @@ builder.Services.AddScoped<IUserGameService, UserGameService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPlaySessionService, PlaySessionService>();
 builder.Services.AddScoped<IPartitionService, PartitionService>();
+builder.Services.AddScoped<GameLibApi.Services.Sharding.ShardingService>();
 
 // ALERTING + PARTITION MAINTENANCE (лабораторная №3)
 // Singleton: сервис помнит последнее состояние по каждой таблице, чтобы не

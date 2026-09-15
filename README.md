@@ -47,6 +47,9 @@ git remote add csharp https://github.com/Dwots/C_sharp_project.git
 | №1. Индексы и EXPLAIN ANALYZE | [`docs/lab-01-indexes.md`](docs/lab-01-indexes.md) | таблица `play_sessions`, индексы миграцией `008` |
 | №2. Когда индексов недостаточно | [`docs/lab-02-growth.md`](docs/lab-02-growth.md) | замеры на объёмах до 10 млн строк, покрывающий индекс |
 | №3. Партиционирование | [`docs/lab-03-partitioning.md`](docs/lab-03-partitioning.md) | миграция `009`, `PartitionService`, job, health check, алерты |
+| №4. Read Scaling (репликация) | [`docs/lab-04-replication.md`](docs/lab-04-replication.md) | потоковая репликация Primary → Replica, миграция `010`, чтение `top-games` с реплики |
+| №5. Шардирование | [`docs/lab-05-sharding.md`](docs/lab-05-sharding.md) | три PostgreSQL, `IShardRouter`, `hash % N` и Consistent Hashing |
+| №6. Запросы после шардирования | [`docs/lab-06-queries-after-sharding.md`](docs/lab-06-queries-after-sharding.md) | разбор запросов сервиса: single-shard, агрегаты, JOIN, отказ шарда |
 
 Вспомогательные SQL-скрипты и сценарий демонстрации — в [`docs/lab-01/`](docs/lab-01/), [`docs/lab-02/`](docs/lab-02/), [`docs/lab-03/`](docs/lab-03/).
 
